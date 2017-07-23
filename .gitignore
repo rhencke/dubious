@@ -1,0 +1,5 @@
+.dub
+.project
+.settings
+dubious.exe
+test.db

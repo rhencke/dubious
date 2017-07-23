@@ -1,0 +1,7 @@
+{
+	"name" : "dubious",
+	"description" : "Hello World - A minimal DUB bundle.",
+	"dependencies" : {
+	},	
+    "libs": ["sqlite3", "dokan1"]
+}
