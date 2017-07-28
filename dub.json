@@ -1,0 +1,8 @@
+{
+	"name" : "fyooz",
+	"description" : "Hello World - A minimal DUB bundle.",
+	"dependencies" : {
+	},
+	"libs": ["sqlite3", "fuse"],
+	"arch": "x86_64"
+}

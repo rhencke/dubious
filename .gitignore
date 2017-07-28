@@ -1,0 +1,5 @@
+/test.db*
+/fyooz
+.DS_Store
+/.dub
+/.project

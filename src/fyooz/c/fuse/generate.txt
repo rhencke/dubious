@@ -1,0 +1,44 @@
+To (re)generate:
+
+./dstep \
+-D_FUSE_H_ \
+-D_FILE_OFFSET_BITS=64 \
+-DFUSE_USE_VERSION=26 \
+-I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
+-I/usr/local/include/osxfuse \
+fuse/fuse_lowlevel.h \
+fuse/fuse_common.h \
+fuse/fuse_opt.h \
+-o path/to/here
+
+Notes:
+
+This is likely macOS only at the moment.  Sorry.
+
+You may need to copy /usr/local/include/osxfuse/fuse to a directory you own, or dstep
+may complain about not having write access.  If so, adjust the line -I/usr/local/include/osxfuse
+accordingly.
+
+fuse_common.h does not want to be included standalone - we trick it with -D_FUSE_H_
+
+If you regenerate these, you will need to make the following adjustments:
+
+* Add 'module fuse.fuse_{common,lowlevel,opt};' as appropriate.
+* Wrap all modules in extern (System) nothrow __gshared { ... }
+* In fuse_lowlevel.d:
+
+	public import fuse.fuse_common;
+	
+	import core.stdc.config;
+	import core.sys.posix.fcntl;
+	import core.sys.posix.sys.stat;
+	import core.sys.posix.sys.statvfs;
+	import core.sys.posix.time;
+	import core.sys.posix.sys.uio;
+* In fuse_lowlevel.d, change setattr_x function to take void* for now?  Don't know right definition.
+* In fuse_common.d:
+	public import fuse.fuse_opt;
+	
+	import core.stdc.config;
+	import core.sys.posix.sys.types;
+	import core.sys.posix.time;
