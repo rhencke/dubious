@@ -4,6 +4,7 @@ import std.exception : enforce;
 import std.conv : to;
 import std.file : FileException;
 import std.format;
+import std.stdio;
 import core.stdc.errno;
 
 import fyooz.c.fuse.fuse_lowlevel;
@@ -95,6 +96,18 @@ abstract class FileSystem
             if (auto fe = cast(FileException) t)
             {
                 err = cast(int) fe.errno;
+            }
+            else
+            {
+                try
+                {
+                    stderr.writeln(
+                            "An unhandled exception occurred.  This is being reported to FUSE as EIO:");
+                    stderr.writeln(t.toString());
+                }
+                catch (Throwable t)
+                {
+                }
             }
             auto ret = fuse_reply_err(req, err);
             if (ret == 0)

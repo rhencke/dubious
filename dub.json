@@ -2,7 +2,11 @@
 	"name" : "fyooz",
 	"description" : "Hello World - A minimal DUB bundle.",
 	"dependencies" : {
+		"d2sqlite3": "~>0.13.1"
 	},
-	"libs": ["sqlite3", "fuse"],
+	 "subConfigurations": {
+        "d2sqlite3": "all-included"
+    },
+	"libs": ["fuse"],
 	"arch": "x86_64"
 }
