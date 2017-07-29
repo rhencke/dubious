@@ -13,6 +13,8 @@ import core.stdc.config;
 import core.sys.posix.sys.types;
 import core.sys.posix.time;
 
+import std.bitmanip;
+
 extern (System) nothrow __gshared:
 
 /*
@@ -123,37 +125,41 @@ struct fuse_file_info
     	    writepage */
     int writepage;
 
-    /** Can be filled in by open, to use direct I/O on this file.
-    	    Introduced in version 2.4 */
-    uint direct_io;
-
-    /** Can be filled in by open, to indicate, that cached file data
-    	    need not be invalidated.  Introduced in version 2.4 */
-    uint keep_cache;
-
-    /** Indicates a flush operation.  Set in flush operation, also
-    	    maybe set in highlevel lock operation and lowlevel release
-    	    operation.	Introduced in version 2.6 */
-    uint flush;
-
-    /** Can be filled in by open, to indicate that the file is not
-    	    seekable.  Introduced in version 2.8 */
-    uint nonseekable;
-
-    /* Indicates that flock locks for this file should be
-    	   released.  If set, lock_owner shall contain a valid value.
-    	   May only be set in ->release().  Introduced in version
-    	   2.9 */
-    uint flock_release;
-
-    /** Padding.  Do not use*/
-    uint padding;
-    uint purge_attr;
-    uint purge_ubc;
-    /* !__APPLE__ */
-    /** Padding.  Do not use*/
-
-    /* __APPLE__ */
+    mixin(bitfields!(uint, "_direct_io", 1, uint, "_keep_cache", 1, uint,
+            "_flush", 1, uint, "_nonseekable", 1, uint, "_flock_release", 1, uint,
+            "_padding", 25, uint, "_purge_attr", 1, uint, "_purge_ubc", 1));
+    // TODO wrapper properties so we keep docs.
+    //    /** Can be filled in by open, to use direct I/O on this file.
+    //    	    Introduced in version 2.4 */
+    //    uint direct_io;
+    //
+    //    /** Can be filled in by open, to indicate, that cached file data
+    //    	    need not be invalidated.  Introduced in version 2.4 */
+    //    uint keep_cache;
+    //
+    //    /** Indicates a flush operation.  Set in flush operation, also
+    //    	    maybe set in highlevel lock operation and lowlevel release
+    //    	    operation.	Introduced in version 2.6 */
+    //    uint flush;
+    //
+    //    /** Can be filled in by open, to indicate that the file is not
+    //    	    seekable.  Introduced in version 2.8 */
+    //    uint nonseekable;
+    //
+    //    /* Indicates that flock locks for this file should be
+    //    	   released.  If set, lock_owner shall contain a valid value.
+    //    	   May only be set in ->release().  Introduced in version
+    //    	   2.9 */
+    //    uint flock_release;
+    //
+    //    /** Padding.  Do not use*/
+    //    uint padding;
+    //    uint purge_attr;
+    //    uint purge_ubc;
+    //    /* !__APPLE__ */
+    //    /** Padding.  Do not use*/
+    //
+    //    /* __APPLE__ */
 
     /** File handle.  May be filled in by filesystem in open().
     	    Available in all other file operations */
@@ -250,9 +256,8 @@ struct fuse_conn_info
     	 */
     struct _Anonymous_0
     {
-        uint case_insensitive;
-        uint setvolname;
-        uint xtimes;
+        mixin(bitfields!(uint, "case_insensitive", 1, uint, "setvolname", 1,
+                uint, "xtimes", 1, uint, "", 5));
     }
 
     _Anonymous_0 enable;

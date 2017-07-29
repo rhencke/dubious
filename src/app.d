@@ -1,6 +1,7 @@
 import std.stdio;
 import std.format;
 import std.algorithm;
+import std.exception;
 import std.string;
 import std.conv;
 import std.array;
@@ -11,85 +12,15 @@ import core.stdc.string : cstrlen = strlen, cstrcmp = strcmp;
 import core.sys.posix.sys.types : off_t, ino_t;
 import core.sys.posix.sys.stat : stat_t, mode_t, S_IFDIR, S_ISDIR, S_IFREG;
 import core.sys.posix.sys.statvfs : statvfs_t;
+import core.sys.posix.fcntl : O_RDONLY, O_RDWR, O_WRONLY;
 import core.stdc.errno;
 
-import fyooz.sqlite3;
+//import fyooz.sqlite3;
 import fyooz.c.fuse.fuse_lowlevel;
 import fyooz.fuse;
 
 import d2sqlite3;
-
-//void main()
-//{
-//    auto db = db("test.db");
-//    db.exec("PRAGMA journal_mode=WAL;");
-//    //   auto stmt = db.stmt("PRAGMA journal_mode=WAL;");
-//}
-//class SqliteFs : Operations
-//{
-//    db database;
-//    stmt getFiles;
-//    stmt findFile;
-//
-//    this(const(char)* dbPath)
-//    {
-//        database = db(dbPath);
-//        getFiles = database.stmt("select name from files");
-//        findFile = database.stmt("
-//WITH RECURSIVE ls(id, depth) AS (
-//	SELECT
-//		1 as id, 0 as depth
-//	UNION ALL
-//	SELECT
-//		 files.id, depth+1 as depth
-//	FROM
-//		files
-//	JOIN
-//		ls
-//	ON
-//		ls.id = files.parent_id
-//	JOIN
-//		readdir
-//	ON
-//		readdir.id = depth+1
-//		AND readdir.name = files.name
-//) SELECT
-//	ls.id
-//FROM
-//	ls
-//WHERE
-//	ls.depth = (select max(id) from readdir)
-//        ");
-//    }
-//
-//    override void getattr(const(char)[] path, ref stat_t s)
-//    {
-//        if (path == "/")
-//        {
-//            s.st_mode = S_IFDIR | octal!755;
-//            s.st_size = 0;
-//            return;
-//        }
-//
-//        //        if (path.among("/a", "/b"))
-//        //        {
-//        s.st_mode = S_IFREG | octal!644;
-//        s.st_size = 42;
-//        return;
-//        //        }
-//
-//        //throw new FuseException(errno.ENOENT);
-//    }
-//
-//    override string[] readdir(const(char)[] path)
-//    {
-//        db.exec("begin tran");
-//        scope (failure)
-//            db.exec("rollback tran");
-//
-//        throw new FuseException(errno.ENOENT);
-//    }
-//}
+import d2sqlite3.sqlite3;
 
 static immutable(char*) hello_str = "Hello World!\n";
 static immutable(char*) hello_name = "hello";
@@ -110,6 +41,7 @@ class SqliteFileSystem : FileSystem
     Statement findFilesParentQ;
     Statement getAttrQ;
     Statement lookupQ;
+    Statement openQ;
 
     this(string path)
     {
@@ -118,9 +50,10 @@ class SqliteFileSystem : FileSystem
         findFilesParentQ = db.prepare("select mode from files where id = ?");
         findFilesQ = db.prepare(
                 "select id, name, mode from files where parent_id = ? order by id limit -1 offset ?");
-        getAttrQ = db.prepare("select mode, coalesce(length(content), 0) from files where id = ?");
-        lookupQ = db.prepare(
-                "select id, mode, coalesce(length(content), 0) from files where parent_id = ? and name = ?");
+        getAttrQ = db.prepare(
+                "select mode, coalesce(length(b.content), 0) from files f left join blobs b on f.id = b.id where f.id = ?");
+        openQ = db.prepare("select mode from files where id = ?");
+        lookupQ = db.prepare("select f.id, mode, coalesce(length(b.content), 0) from files f left join blobs b on f.id = b.id where parent_id = ? and name = ?");
     }
 
     override void getattr(fuse_ino_t ino, fuse_file_info* fi)
@@ -142,23 +75,6 @@ class SqliteFileSystem : FileSystem
             stbuf.st_size = row.peek!long(1);
             fuse_reply_attr(req, &stbuf, 1);
         }
-        //        switch (ino)
-        //        {
-        //        case 1:
-        //            stbuf.st_mode = S_IFDIR | octal!755;
-        //            stbuf.st_nlink = 2;
-        //            fuse_reply_attr(req, &stbuf, 1);
-        //            break;
-        //        case 2:
-        //            stbuf.st_mode = S_IFREG | octal!444;
-        //            stbuf.st_nlink = 1;
-        //            stbuf.st_size = cstrlen(hello_str);
-        //            fuse_reply_attr(req, &stbuf, 1);
-        //            break;
-        //        default:
-        //            fuse_reply_err(req, ENOENT);
-        //            break;
-        //        }
     }
 
     override void lookup(fuse_ino_t parent, const(char)* name)
@@ -186,48 +102,86 @@ class SqliteFileSystem : FileSystem
             e.attr.st_size = row.peek!long(2);
             fuse_reply_entry(req, &e);
         }
-        //        switch (parent)
-        //        {
-        //        case 1:
-        //            if (cstrcmp(name, hello_name) != 0)
-        //            {
-        //                fuse_reply_err(req, ENOENT);
-        //                return;
-        //            }
-        //            e.ino = 2;
-        //            e.attr_timeout = 1.0;
-        //            e.entry_timeout = 1.0;
-        //            e.attr.st_mode = S_IFREG | octal!444;
-        //            e.attr.st_nlink = 1;
-        //            e.attr.st_size = cstrlen(hello_str);
-        //            fuse_reply_entry(req, &e);
-        //            break;
-        //        default:
-        //            fuse_reply_err(req, ENOTDIR);
-        //            break;
-        //        }
+    }
+
+    private enum O_ACCMODE = 3;
+    override void open(fuse_ino_t ino, fuse_file_info* fi)
+    {
+        openQ.reset();
+        openQ.bind(1, ino);
+        auto rows = openQ.execute();
+
+        if (rows.empty)
+            throw new FuseException(ENOENT);
+
+        auto row = rows.front;
+        auto requestedAccess = fi.flags & O_ACCMODE;
+
+        if (S_ISDIR(row.peek!ushort(0)) && (requestedAccess == O_RDWR || requestedAccess == O_WRONLY))
+            throw new FuseException(EISDIR);
+
+        sqlite3_blob* blob;
+        auto ret = sqlite3_blob_open(db.handle(), "main", "blobs", "content",
+                ino, requestedAccess, &blob);
+        if (ret == SQLITE_ERROR)
+        {
+            throw new FuseException(EIO); // TODO
+        }
+        fi.fh = cast(ulong) blob;
+        fuse_reply_open(req, fi);
+    }
+
+    override void read(fuse_ino_t ino, size_t size, off_t off, fuse_file_info* fi)
+    {
+        if (fi.fh == 0)
+        {
+            throw new FuseException(EBADF);
+        }
+        sqlite3_blob* blob = cast(sqlite3_blob*) fi.fh;
+
+        // SQLite will return an error if we attempt to read past the end of a blob.
+        // So, we must determine up front how much is safe to read.
+        // todo: dealing with stuff out of range of int, and diffs in what read vs sqlite_read use for sizes.
+        auto blobSize = cast(ulong) sqlite3_blob_bytes(blob);
+
+        if (off >= blobSize)
+        {
+            // read at or past end of blob - EOF.
+            fuse_reply_buf(req, null, 0);
+            return;
+        }
+        // Read the minimum of either:
+        // * size requested
+        // * bytes left in the blob
+        size = min(size, blobSize - off);
+        auto buf = new char[size];
+        auto ret = sqlite3_blob_read(blob, buf.ptr, cast(int) size, cast(int) off);
+        if (ret != SQLITE_OK)
+        {
+            throw new FuseException(EIO); // TODO
+        }
+        fuse_reply_buf(req, buf.ptr, buf.length);
+    }
+
+    override void release(fuse_ino_t ino, fuse_file_info* fi)
+    {
+        if (fi.fh == 0)
+        {
+            throw new FuseException(EBADF);
+        }
+        sqlite3_blob* blob = cast(sqlite3_blob*) fi.fh;
+        sqlite3_blob_close(blob);
+        fuse_reply_err(req, 0); // OK
+    }
+
+    override void flush(fuse_ino_t ino, fuse_file_info* fi)
+    {
+        fuse_reply_err(req, 0); // OK
     }
 
     override void readdir(fuse_ino_t ino, size_t size, off_t off, fuse_file_info* fi)
     {
-        // Offset below 0 is a sign there are no more entries.
-        if (off < 0)
-        {
-            fuse_reply_buf(req, null, 0);
-            return;
-        }
-
-        // opendir = prepare statement?
-        // readdir = iterate?
-        // closedir = finalize?
-        //        findFiles.reset();
-        //        findFiles.bind(1, ino);
-        //        foreach (row; findFiles.execute())
-        //        {
-        //            writeln("id: " ~ to!string(row.peek!long(0)));
-        //            writeln("name: " ~ row.peek!string(1));
-        //        }
-
+        // TODO stress-test and ensure offset mechanism, size limits work right.
         char[] dirbuf = new char[size];
         uint len = 0;
 
@@ -257,7 +211,6 @@ class SqliteFileSystem : FileSystem
 
         auto rows = findFilesParentQ.execute();
 
-        // First row, if it exists, is special.  We use it to:
         // * Verify this inode exists at all
         // * Verify if it exists, it is a directory
         if (rows.empty || !S_ISDIR(rows.oneValue!ushort))

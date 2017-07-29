@@ -48,6 +48,16 @@ private template callback(string name, Ts...)
 
 }
 
+class FuseException : Exception
+{
+    immutable ushort errno;
+    this(ushort errno, string file = __FILE__, size_t line = __LINE__)
+    {
+        super(":(", file, line);
+        this.errno = errno;
+    }
+}
+
 abstract class FileSystem
 {
     // TODO: figure out threading crap
@@ -61,6 +71,8 @@ abstract class FileSystem
     mixin(callback!("read", fuse_ino_t, "ino", size_t, "size", off_t, "off",
             fuse_file_info*, "fi"));
     mixin(callback!("statfs", fuse_ino_t, "ino"));
+    mixin(callback!("release", fuse_ino_t, "ino", fuse_file_info*, "fi"));
+    mixin(callback!("flush", fuse_ino_t, "ino", fuse_file_info*, "fi"));
 
     // TODO: work into mixins
     static void hookOps(fuse_lowlevel_ops* ops)
@@ -71,6 +83,7 @@ abstract class FileSystem
         ops.open = &_open;
         ops.read = &_read;
         ops.statfs = &_statfs;
+        ops.release = &_release;
     }
 
     private void notImpl()
@@ -93,7 +106,7 @@ abstract class FileSystem
         catch (Throwable t)
         {
             int err = EIO;
-            if (auto fe = cast(FileException) t)
+            if (auto fe = cast(FuseException) t)
             {
                 err = cast(int) fe.errno;
             }
