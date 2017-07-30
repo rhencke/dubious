@@ -88,7 +88,7 @@ abstract class FileSystem
 
     private void notImpl()
     {
-        throw new FileException("", EOPNOTSUPP);
+        throw new FuseException(EOPNOTSUPP);
     }
 
     nothrow private static __gshared invoke(fuse_req_t req, void delegate(FileSystem) cb)
